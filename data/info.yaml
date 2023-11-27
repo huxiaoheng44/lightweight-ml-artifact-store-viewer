@@ -1,0 +1,8 @@
+version: 1.0
+name: "Demo dataset"
+size: 1
+
+sources:
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Logo_of_the_Technical_University_of_Munich.svg/200px-Logo_of_the_Technical_University_of_Munich.svg.png'
+    ply: 'https://people.sc.fsu.edu/~jburkardt/data/ply/teapot.ply'
+    video: 'https://www.epc.ed.tum.de/fileadmin/w00cgc/cm/pics/TUM_crash_last.gif'
