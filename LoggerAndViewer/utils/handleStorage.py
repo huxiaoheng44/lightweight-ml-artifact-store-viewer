@@ -1,5 +1,6 @@
 import boto3
-from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import NoCredentialsError, ClientError
+
 
 def configure_aws_session(aws_access_key_id, aws_secret_access_key, aws_session_token=None, region_name='us-east-1'):
     """

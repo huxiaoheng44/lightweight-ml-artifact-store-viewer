@@ -1,18 +1,19 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog
-from ..utils.handleStorage import upload_to_s3
-from ..utils.handleStorage import aws_credentials_configured
-from ..utils.handleStorage import list_files_in_bucket
-from ..utils.handleStorage import list_s3_buckets
-from ..utils.handleStorage import download_from_s3
-from ..utils.handleStorage import configure_aws_session
+from ..utils import handleStorage
+from ..dataset import DataManager
+import boto3
+
+
+
 
 
 class TrainingLogApp:
+    
     def __init__(self, master):
         self.master = master
         self.master.title('Login')
-        if not aws_credentials_configured():
+        if not handleStorage.aws_credentials_configured():
             self.prompt_aws_credentials()
         else:
             self.create_main_window()
@@ -73,7 +74,7 @@ class TrainingLogApp:
         self.button_select_file.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
         # Button for selecting a log folder
-        self.button_select_folder = tk.Button(self.main_window, text="Select Log Folder", command=self.select_folder)
+        self.button_select_folder = tk.Button(self.main_window, text="Delete Log File", command=self.delete_log_file)
         self.button_select_folder.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Button for selecting file from S3
@@ -81,7 +82,7 @@ class TrainingLogApp:
         self.button_select_s3_file.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
         
         # Listbox to display selected files and folders
-        self.listbox_paths = tk.Listbox(self.main_window)
+        self.listbox_paths = tk.Listbox(self.main_window, selectmode='multiple')
         self.listbox_paths.grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky='nsew')
 
         # Button to add metadata to the selected file or folder
@@ -96,22 +97,71 @@ class TrainingLogApp:
         self.button_iam_configure = tk.Button(self.main_window, text="Add IAM Configuration", command=self.prompt_aws_credentials)
         self.button_iam_configure.grid(row=5, column=0, columnspan=2, padx=5, pady=5, sticky="ew")
 
-        # Adjust the grid to make the listbox expand
+        # Label and Entry for metadata key
+        self.label_metadata_key = tk.Label(self.main_window, text="Metadata Key:")
+        self.label_metadata_key.grid(row=6, column=0, sticky="ew", padx=5)
+        self.entry_key = tk.Entry(self.main_window)
+        self.entry_key.grid(row=6, column=1, sticky="ew", padx=5)
+
+        # Label and Entry for metadata value
+        self.label_metadata_value = tk.Label(self.main_window, text="Metadata Value:")
+        self.label_metadata_value.grid(row=7, column=0, sticky="ew", padx=5)
+        self.entry_value = tk.Entry(self.main_window)
+        self.entry_value.grid(row=7, column=1, sticky="ew", padx=5)
+
+        # Adjust the grid to make the listbox_paths expand
         self.main_window.grid_rowconfigure(2, weight=1)
+        
+        # Get file list from Database
+        meta_data_manager = DataManager()
+        files = meta_data_manager.getAllFiles()
+        # Show file list on Listbox
+        for file in files:
+            self.listbox_paths.insert(tk.END, file["file"])
+                
+
+        # Initialize metadata dictionary
+        self.metadata = {}
 
 
+    def delete_log_file(self):
+        selected_indices = self.listbox_paths.curselection()
+        if not selected_indices:
+            messagebox.showwarning("Warning", "Please select files to delete.")
+            return
+        
+        meta_data_manager = DataManager()
+        deleted_files = []
+        
+        for index in selected_indices[::-1]:
+            selected_file = self.listbox_paths.get(index)
+            meta_data_manager.deleteFile(selected_file)
+            self.listbox_paths.delete(index)
+            deleted_files.append(selected_file)
+        
+        messagebox.showinfo("Success", f"Deleted {len(deleted_files)} files: {', '.join(deleted_files)}")
 
-    def select_folder(self):
-        """ Open a directory dialog and update the listbox with the selected folder. """
-        folder_path = filedialog.askdirectory()
-        if folder_path:
-            self.listbox_folders.insert(tk.END, folder_path)
+    # def select_folder(self):
+    #     """ Open a directory dialog and update the listbox with the selected folder. """
+    #     folder_path = filedialog.askdirectory()
+    #     if folder_path:
+    #         self.listbox_folders.insert(tk.END, folder_path)
 
     def select_log_file(self):
         """ Open a file dialog and update the listbox with the selected file. """
         file_path = filedialog.askopenfilename()
         if file_path:
-            self.listbox_files.insert(tk.END, file_path)
+            self.listbox_paths.insert(tk.END, file_path)
+            meta_data_manager = DataManager()
+            fileType = "undefine"
+            # TODO: identify the file type
+            file_json = {
+                "file":file_path,
+                "type": "undefine"
+            }
+            print(file_json)
+            meta_data_manager.addFile(file_json)
+            
             
             
     def select_s3_file(self):
@@ -157,7 +207,7 @@ class TrainingLogApp:
             self.listbox_s3_files.delete(0, tk.END)
             try:
 
-                files = list_files_in_bucket(bucket_name)
+                files = handleStorage.list_files_in_bucket(bucket_name)
 
                 for file in files:
                     self.listbox_s3_files.insert(tk.END, file)
@@ -181,7 +231,7 @@ class TrainingLogApp:
 
         try:
             download_path = f"{download_directory}/{selected_file}"
-            download_from_s3(self.current_bucket, selected_file, download_path)
+            handleStorage.download_from_s3(self.current_bucket, selected_file, download_path)
             messagebox.showinfo("Success", f"File downloaded to {download_path}")
             # Add the downloaded file's path to the main window's Listbox
             self.listbox_paths.insert(tk.END, download_path)
@@ -192,32 +242,34 @@ class TrainingLogApp:
     def load_buckets(self):
 
         try:
-            buckets = list_s3_buckets()
+            buckets = handleStorage.list_s3_buckets()
             for bucket in buckets:
                 self.listbox_buckets.insert(tk.END, bucket)
         except Exception as e:
             messagebox.showerror("Error", f"Can not get bucket list from S3: {e}")
 
-    def add_metadata_to_file(self):
-        """ Add metadata to the selected log file. """
-        selected_indices = self.listbox_files.curselection()
-        if not selected_indices:
-            messagebox.showwarning("Warning", "Please select a file.")
-            return
 
-        selected_file = self.listbox_files.get(selected_indices[0])
-        self.add_metadata(selected_file)
+    # def add_metadata_to_file(self):
+    #     """ Add metadata to the selected log file. """
+    #     selected_indices = self.listbox_files.curselection()
+    #     if not selected_indices:  
+    #         messagebox.showwarning("Warning", "Please select a file.")
+    #         return
 
-    def add_metadata_to_folder(self):
-        """ Add metadata to the selected folder. """
-        selected_indices = self.listbox_folders.curselection()
-        if not selected_indices:
-            messagebox.showwarning("Warning", "Please select a folder.")
-            return
+    #     selected_file = self.listbox_files.get(selected_indices[0])
+    #     self.add_metadata(selected_file)
 
-        selected_folder = self.listbox_folders.get(selected_indices[0])
-        # Implement the logic to add metadata here.
-        # ...
+
+    # def add_metadata_to_folder(self):
+    #     """ Add metadata to the selected folder. """
+    #     selected_indices = self.listbox_folders.curselection()
+    #     if not selected_indices:
+    #         messagebox.showwarning("Warning", "Please select a folder.")
+    #         return
+
+    #     selected_folder = self.listbox_folders.get(selected_indices[0])
+    #     # Implement the logic to add metadata here.
+    #     # ...
 
 
 
@@ -233,16 +285,33 @@ class TrainingLogApp:
         # ...
 
     def add_metadata(self):
-        """ Add metadata key-value pair to the dictionary and listbox. """
+        """ Add metadata key-value pair to the dictionary and listbox, along with selected file paths. """
         key = self.entry_key.get()
         value = self.entry_value.get()
-        if key and value:  # Ensure that neither key nor value is empty
-            self.metadata[key] = value
-            self.listbox_metadata.insert(tk.END, f"{key}: {value}")
+        meta_data_manager = DataManager()
+
+        if key and value:
+
+            selected_indices = self.listbox_paths.curselection()
+            selected_files = [self.listbox_paths.get(i) for i in selected_indices]
+
+            metadata_entry = {key: value}
+            
+            for file in selected_files:
+                metadata_json = {
+                    "file": file,
+                    "metadata": [metadata_entry]
+                }
+                print(metadata_json)
+                meta_data_manager.addMetaData(metadata_json)
+            
+
             self.entry_key.delete(0, tk.END)
             self.entry_value.delete(0, tk.END)
         else:
             messagebox.showwarning("Warning", "Both key and value are required.")
+
+
 
     def on_close_main_window(self):
         """ Handle the closing of the main window. """
@@ -285,7 +354,7 @@ class TrainingLogApp:
         access_key = self.entry_access_key.get()
         secret_key = self.entry_secret_key.get()
         if access_key and secret_key:
-            configure_aws_session(access_key, secret_key)
+            handleStorage.configure_aws_session(access_key, secret_key)
             self.credentials_window.destroy()
             self.create_main_window() 
         else:

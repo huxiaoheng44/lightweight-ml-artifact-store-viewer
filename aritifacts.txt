@@ -1,0 +1,4 @@
+	MSE: float
+	Completeness: float
+	ExperimentName: string
+	TrainingIteration: integer

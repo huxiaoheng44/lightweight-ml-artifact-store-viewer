@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Artifact Viewer</title>
+    <!-- Include Tailwind CSS from CDN for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.x/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="p-4">
+<div class="flex">
+    <!-- Left side panel for choosing grouping criteria -->
+    <div class="w-1/4 p-4 border-r">
+        <h2 class="font-bold mb-4">Grouping Controls</h2>
+        <!-- Dropdown menu to select grouping criteria -->
+        <select class="mb-4 p-2 border rounded" onchange="updateGrouping(this.value)">
+            <option value="ModelName" {{
+            'selected' if group_by == 'ModelName' else '' }}>Model Name</option>
+            <option value="ExperimentName" {{
+            'selected' if group_by == 'ExperimentName' else '' }}>Experiment Name</option>
+        </select>
+
+        <!-- Search form -->
+        <form action="/" method="get">
+            <input class="mb-2 p-2 border rounded w-full" name="search_value" placeholder="Search value" type="text">
+            <select class="mb-4 p-2 border rounded w-full" name="search_field">
+
+                <option value="ModelName">Model Name</option>
+                <option value="ExperimentName">Experiment Name</option>
+                <option value="Metadata">Metadata</option>
+                <!-- Add more fields as needed -->
+            </select>
+            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full" type="submit">
+                Search
+            </button>
+        </form>
+
+        <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full mt-4"
+                id="visualization-btn">
+            Visualization
+        </button>
+
+        <!-- Modal content -->
+        <div class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full"
+             id="visualization-modal">
+            <!-- Modal container -->
+            <div class="relative top-20 mx-auto p-5 border w-1/2 h-4/5 shadow-lg rounded-md bg-white">
+                <!-- Modal header -->
+                <div class="flex justify-between items-center border-b pb-3 sticky top-0 bg-white">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">Generated Charts</h3>
+                    <button class="text-gray-900 font-bold text-2xl" id="close-modal">&times;</button>
+                </div>
+                <!-- Modal body -->
+                <div class="mt-2 px-7 py-3 overflow-auto h-5/6">
+                    <div class="text-sm text-gray-500" id="charts-list">
+                        <!-- Images will be added here by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded w-full mt-4"
+                onclick="startTensorBoard()">Start
+            TensorBoard
+        </button>
+    </div>
+
+    <!-- Right side for displaying grouped data -->
+    <div class="w-3/4 p-4 overflow-auto">
+        <div id="data-container">
+            {% if search_active %}
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="font-bold">Search Results</h2>
+                <button class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
+                        onclick="window.location.href='/'">X
+                </button>
+            </div>
+            <!-- if search result is empty-->
+            {% if grouped_data|length == 0 %}
+            <p class="text-gray-500">No results found.</p>
+            {% endif %}
+
+            {% endif %}
+            <!-- Iterate over each group in grouped_data -->
+            {% for group in grouped_data %}
+            {% set group_index = loop.index %}
+            <!-- Individual group container -->
+            <div class="mb-4">
+                <!-- Clickable header for expanding and collapsing content -->
+                <div class="flex justify-between items-center bg-gray-200 py-2 px-4">
+                    <button class="font-bold" onclick="toggleContent('group-{{ loop.index }}')">
+                        {{ group[0].get(group_by) }} (Click to toggle)
+                    </button>
+                    <input class="group-checkbox" data-target="group-{{ loop.index }}" type="checkbox">
+                </div>
+                <!-- Hidden content for each group -->
+                <div class="hidden" id="group-{{ loop.index }}">
+                    {% for artifact in group %}
+                    <div class="border p-2 my-2 flex justify-between items-center">
+                        <div>
+
+                            {% for key, value in artifact.items() %}
+                            <p><strong>{{ key }}:</strong> {{ value }}</p>
+                            {% endfor %}
+                        </div>
+                        <input class="w-6 h-6 artifact-checkbox"
+                               data-filepath="{{ artifact['FileList'][0] if artifact['FileList'] }} "
+                               image-path="{{ artifact['ImageInfo']['ImagePath'] if artifact['ImageInfo'] }}"
+                               data-group="group-{{ group_index }}"
+                               type="checkbox">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript to toggle the display of content and to update grouping -->
+<script>
+
+
+    var modal = document.getElementById("visualization-modal");
+    var btn = document.getElementById("visualization-btn");
+    var closeBtn = document.getElementById("close-modal");
+
+
+    btn.onclick = function () {
+        modal.classList.remove('hidden');
+    };
+
+    closeBtn.onclick = function () {
+        modal.classList.add('hidden');
+    };
+
+    // When the user clicks the overall checkbox, all checkboxes in the group should be checked
+    document.querySelectorAll('.group-checkbox').forEach(function (groupCheckbox) {
+        groupCheckbox.addEventListener('change', function () {
+            var groupId = this.getAttribute('data-target');
+            var checkboxes = document.querySelectorAll('input[data-group="' + groupId + '"]');
+            checkboxes.forEach(function (checkbox) {
+                checkbox.checked = groupCheckbox.checked;
+            });
+        });
+    });
+
+
+    document.getElementById('visualization-btn').addEventListener('click', function () {
+        let filePaths = [];
+        document.querySelectorAll('.artifact-checkbox:checked').forEach(function (checkbox) {
+            filePaths.push(checkbox.getAttribute('data-filepath'));
+        });
+
+        let uniqueFilePaths = [...new Set(filePaths)];
+
+        console.log(uniqueFilePaths);
+        fetch('/generate-charts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({files: uniqueFilePaths})
+        })
+            .then(response => response.json())
+            .then(data => {
+                let chartsListDiv = document.getElementById('charts-list');
+                chartsListDiv.innerHTML = ''; // clear the div
+
+                data.forEach(function (chartPath) {
+                    // create an image element for each chart
+                    let img = document.createElement('img');
+                    img.src = chartPath;
+                    img.style.width = '100%';
+                    img.style.marginTop = '10px';
+                    chartsListDiv.appendChild(img);
+                });
+
+                modal.classList.remove('hidden');
+            })
+            .catch(error => console.error('Error:', error));
+    });
+
+
+    // Function to toggle the display of content based on the provided ID
+    function toggleContent(id) {
+        var content = document.getElementById(id);
+        if (content.style.display === "none" || content.style.display === "") {
+            content.style.display = "block"; // Show content
+        } else {
+            content.style.display = "none"; // Hide content
+        }
+    }
+
+    // Function to update the grouping based on the selected criteria
+    function updateGrouping(groupBy) {
+        window.location.href = `/?group_by=${groupBy}`;
+    }
+
+
+    function startTensorBoard() {
+        fetch('/start-tensorboard')
+            .then(response => response.text())
+            .then(data => {
+                alert(data);
+                // reload to tensor board
+                window.location.href = 'http://localhost:6006';
+            })
+            .catch(error => console.error('Error:', error));
+    }
+</script>
+</body>
+</html>
