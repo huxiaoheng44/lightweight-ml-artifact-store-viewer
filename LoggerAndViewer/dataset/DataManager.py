@@ -142,6 +142,16 @@ class DataManager:
 
         return self.artifact_record
 
+    def searchArtifactByFieldValue(self, field, value):
+        """Search for artifacts in the 'artifacts' collection based on a field and a value (fuzzy search)."""
+        try:
+            query = {field: re.compile(value, re.IGNORECASE)}
+            result =  self.searchArtifacts(query)
+            return result
+        except errors.PyMongoError as e:
+            print(f"An error occurred while searching for artifacts by field value: {e}")
+            return []
+
     def getArtifactTemplate(self):
         return self.artifact_record.copy()
 
