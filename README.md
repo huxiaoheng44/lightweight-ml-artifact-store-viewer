@@ -65,6 +65,7 @@ Adds or updates a file record in the `files` collection based on the provided JS
 Generates default values for a specified type, supporting basic data types like float, integer, string, and complex types like list, dict, set, etc.
 
 ### `readArtifactsFromFile(self, file_path)`
+
 Reads artifact data from a specified file path and initializes an artifact record with default values based on the file's content.
 
 ### `getArtifactTemplate(self)`

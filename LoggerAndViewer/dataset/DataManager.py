@@ -16,6 +16,14 @@ class DataManager:
             self.db = self.client['PMSD']
             self.collection = self.db['metadata']
             self.artifact_record = {}
+            
+            # Initialize the 'artifacts' collection if it doesn't exist
+            self.artifact_record['ArtifactID'] = ObjectId()  # Generate a new ObjectId for the artifact
+            self.artifact_record['ModelName'] = "undefined" # Default ModelName
+            self.artifact_record['TrainingIteration'] = 0  # Default TrainingIteration
+            self.artifact_record['FileList'] = []  # This can be populated as needed
+            self.artifact_record['Metadata'] = []  # Initialize Metadata as an empty list
+            
             # print("Connected to MongoDB.")
         except ConnectionFailure:
             print("Failed to connect to MongoDB. Please check your connection details.")
